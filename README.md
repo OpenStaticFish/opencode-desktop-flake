@@ -88,6 +88,16 @@ nix build
 - On Wayland, the app runs via XWayland by default (set `OC_ALLOW_WAYLAND=1` for native Wayland)
 - First launch may take a moment as the FHS environment is set up
 
+## Automated Updates
+
+This repository uses a custom GitHub Actions workflow to automatically update `flake.lock`:
+
+- **Schedule** - Runs every Monday at 4:00 AM UTC
+- **Manual trigger** - Can be triggered manually from the Actions tab
+- **Pull requests** - Creates PRs for you to review before merging
+
+The workflow uses [update-flake-lock](https://github.com/DeterminateSystems/update-flake-lock) to check for updates to `nixpkgs-unstable` and other flake inputs.
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file

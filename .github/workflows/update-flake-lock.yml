@@ -1,0 +1,30 @@
+name: Update flake.lock
+
+on:
+  schedule:
+    # Run every Monday at 4:00 AM UTC
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  update-flake-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v12
+
+      - name: Update flake.lock
+        uses: DeterminateSystems/update-flake-lock@v24
+        with:
+          pr-title: "chore: update flake.lock"
+          pr-body: |
+            Automated update of `flake.lock`.
+            
+            This PR was generated automatically by the update-flake-lock workflow.
+            Please review the changes before merging.
+          commit-msg: "chore: update flake.lock"
+          token: ${{ secrets.GITHUB_TOKEN }}
