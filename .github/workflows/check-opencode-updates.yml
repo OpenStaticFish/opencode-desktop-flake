@@ -63,13 +63,19 @@ jobs:
         run: |
           VERSION="${{ needs.check-update.outputs.latest_version }}"
           
-          # Calculate hashes for all platforms
+          # Calculate hashes for all platforms (convert base32 to SRI format)
           echo "Calculating hashes for version $VERSION..."
           
-          HASH_AMD64=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-amd64.deb" 2>&1 | tail -1)
-          HASH_ARM64=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-arm64.deb" 2>&1 | tail -1)
-          HASH_DARWIN_AARCH64=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-aarch64.app.tar.gz" 2>&1 | tail -1)
-          HASH_DARWIN_X64=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-x64.app.tar.gz" 2>&1 | tail -1)
+          HASH_AMD64_RAW=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-amd64.deb" 2>&1 | tail -1)
+          HASH_ARM64_RAW=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-arm64.deb" 2>&1 | tail -1)
+          HASH_DARWIN_AARCH64_RAW=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-aarch64.app.tar.gz" 2>&1 | tail -1)
+          HASH_DARWIN_X64_RAW=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-x64.app.tar.gz" 2>&1 | tail -1)
+          
+          # Convert base32 to SRI format
+          HASH_AMD64=$(nix hash convert --hash-algo sha256 --to sri "$HASH_AMD64_RAW")
+          HASH_ARM64=$(nix hash convert --hash-algo sha256 --to sri "$HASH_ARM64_RAW")
+          HASH_DARWIN_AARCH64=$(nix hash convert --hash-algo sha256 --to sri "$HASH_DARWIN_AARCH64_RAW")
+          HASH_DARWIN_X64=$(nix hash convert --hash-algo sha256 --to sri "$HASH_DARWIN_X64_RAW")
           
           echo "hash_amd64=$HASH_AMD64" >> $GITHUB_OUTPUT
           echo "hash_arm64=$HASH_ARM64" >> $GITHUB_OUTPUT
