@@ -90,7 +90,16 @@ nix build
 
 ## Automated Updates
 
-This repository uses a custom GitHub Actions workflow to automatically update `flake.lock`:
+This repository uses GitHub Actions workflows to automatically handle updates:
+
+### OpenCode Desktop Version Updates
+
+- **Schedule** - Runs daily at 6:00 AM UTC to check for new OpenCode Desktop releases
+- **Manual trigger** - Can be triggered manually from the Actions tab
+- **Auto-update** - Automatically updates version and calculates new hashes for all platforms
+- **Pull requests** - Creates PRs for you to review before merging
+
+### Nixpkgs Updates (flake.lock)
 
 - **Schedule** - Runs every Monday at 4:00 AM UTC
 - **Manual trigger** - Can be triggered manually from the Actions tab

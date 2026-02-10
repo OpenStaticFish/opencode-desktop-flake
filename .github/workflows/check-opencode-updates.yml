@@ -1,0 +1,115 @@
+name: Check for OpenCode Desktop updates
+
+on:
+  schedule:
+    # Run daily at 6:00 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  check-update:
+    runs-on: ubuntu-latest
+    outputs:
+      update_needed: ${{ steps.check.outputs.update_needed }}
+      latest_version: ${{ steps.check.outputs.latest_version }}
+      current_version: ${{ steps.check.outputs.current_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT_VERSION=$(grep 'version = "' flake.nix | head -1 | sed 's/.*version = "\(.*\)".*/\1/')
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Check for latest release
+        id: check
+        run: |
+          CURRENT_VERSION="${{ steps.current.outputs.current_version }}"
+          
+          # Get latest release from GitHub API
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest)
+          LATEST_VERSION=$(echo "$LATEST_RELEASE" | grep '"tag_name":' | sed 's/.*"tag_name": "v\(.*\)".*/\1/')
+          
+          echo "Latest version: $LATEST_VERSION"
+          echo "Current version: $CURRENT_VERSION"
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          if [ "$LATEST_VERSION" != "$CURRENT_VERSION" ]; then
+            echo "Update needed: $CURRENT_VERSION -> $LATEST_VERSION"
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No update needed"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+          fi
+
+  update-flake:
+    needs: check-update
+    runs-on: ubuntu-latest
+    if: ${{ needs.check-update.outputs.update_needed == 'true' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v12
+
+      - name: Calculate new hashes
+        id: hashes
+        run: |
+          VERSION="${{ needs.check-update.outputs.latest_version }}"
+          
+          # Calculate hashes for all platforms
+          echo "Calculating hashes for version $VERSION..."
+          
+          HASH_AMD64=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-amd64.deb" 2>&1 | tail -1)
+          HASH_ARM64=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-arm64.deb" 2>&1 | tail -1)
+          HASH_DARWIN_AARCH64=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-aarch64.app.tar.gz" 2>&1 | tail -1)
+          HASH_DARWIN_X64=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-x64.app.tar.gz" 2>&1 | tail -1)
+          
+          echo "hash_amd64=$HASH_AMD64" >> $GITHUB_OUTPUT
+          echo "hash_arm64=$HASH_ARM64" >> $GITHUB_OUTPUT
+          echo "hash_darwin_aarch64=$HASH_DARWIN_AARCH64" >> $GITHUB_OUTPUT
+          echo "hash_darwin_x64=$HASH_DARWIN_X64" >> $GITHUB_OUTPUT
+
+      - name: Update flake.nix
+        run: |
+          VERSION="${{ needs.check-update.outputs.latest_version }}"
+          
+          # Update version
+          sed -i "s/version = \".*\";/version = \"${VERSION}\";/" flake.nix
+          
+          # Update hashes
+          sed -i "s|hash = \"sha256-.*\";|hash = \"${{ steps.hashes.outputs.hash_amd64 }}\";|" flake.nix
+          sed -i "0,/hash = \"sha256-.*\";/{s|hash = \"sha256-.*\";|hash = \"${{ steps.hashes.outputs.hash_arm64 }}\";|}" flake.nix
+          sed -i "0,/hash = \"sha256-.*\";/{s|hash = \"sha256-.*\";|hash = \"${{ steps.hashes.outputs.hash_darwin_aarch64 }}\";|}" flake.nix
+          sed -i "0,/hash = \"sha256-.*\";/{s|hash = \"sha256-.*\";|hash = \"${{ steps.hashes.outputs.hash_darwin_x64 }}\";|}" flake.nix
+          
+          # Show changes
+          git diff flake.nix
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump opencode-desktop to ${{ needs.check-update.outputs.latest_version }}"
+          title: "chore: bump opencode-desktop to ${{ needs.check-update.outputs.latest_version }}"
+          body: |
+            Automated update of OpenCode Desktop.
+            
+            **Changes:**
+            - Version: ${{ needs.check-update.outputs.current_version }} → ${{ needs.check-update.outputs.latest_version }}
+            - Updated hashes for all platforms:
+              - x86_64-linux
+              - aarch64-linux
+              - aarch64-darwin
+              - x86_64-darwin
+            
+            This PR was generated automatically by the update-check workflow.
+            Please review the changes before merging.
+          branch: update/opencode-desktop-${{ needs.check-update.outputs.latest_version }}
+          delete-branch: true
