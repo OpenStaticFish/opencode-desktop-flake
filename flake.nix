@@ -16,7 +16,7 @@
       
       forEachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
       
-      version = "1.1.54";
+      version = "1.1.59";
       
     in {
       packages = forEachSystem (pkgs: 
@@ -27,19 +27,19 @@
           platformInfo = {
             x86_64-linux = {
               asset = "opencode-desktop-linux-amd64.deb";
-              hash = "sha256-ZY62XhYd23QGFJe6noayBkdorCZqfFdACmzVrrWQPnw=";
+              hash = "sha256-+zom8S2BS8rFuymwd3zh0MPDGibZNm+bqBIFlOjxRfU=";
             };
             aarch64-linux = {
               asset = "opencode-desktop-linux-arm64.deb";
-              hash = "sha256-XpDrvfHYr5/q1eAaO9v9aRRne+ylEaLwN3ASz+NrhDs=";
+              hash = "sha256-7j2cgmHyYYqnNsXFgqTeGm1102aSFpn9W+Wofs1EDXs=";
             };
             aarch64-darwin = {
               asset = "opencode-desktop-darwin-aarch64.app.tar.gz";
-              hash = "sha256-JVYRm+AkLXKOzvssGt2FZAyYshMWfbprWJQ6zmC3oAs=";
+              hash = "sha256-Pcdhn7qC+3ES+VTG955vfGAnKpLoAcQwsFzxIuODmhA=";
             };
             x86_64-darwin = {
               asset = "opencode-desktop-darwin-x64.app.tar.gz";
-              hash = "sha256-Sjt5qpw5WTDqaOvq24Zj+GwlOwfyWXE31lQylqJj8lY=";
+              hash = "sha256-wzmPnesaNOMOQqOmCOW9DfyOonD/lb7GgBUF4NX2LUg=";
             };
           };
           
