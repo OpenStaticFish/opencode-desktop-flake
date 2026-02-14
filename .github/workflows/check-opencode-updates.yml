@@ -66,21 +66,33 @@ jobs:
           # Calculate hashes for all platforms (convert base32 to SRI format)
           echo "Calculating hashes for version $VERSION..."
           
-          HASH_AMD64_RAW=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-amd64.deb" 2>&1 | tail -1)
-          HASH_ARM64_RAW=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-arm64.deb" 2>&1 | tail -1)
-          HASH_DARWIN_AARCH64_RAW=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-aarch64.app.tar.gz" 2>&1 | tail -1)
-          HASH_DARWIN_X64_RAW=$(nix-prefetch-url "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-x64.app.tar.gz" 2>&1 | tail -1)
+          # Function to fetch and convert hash
+          fetch_hash() {
+            local url="$1"
+            local raw_hash
+            raw_hash=$(nix-prefetch-url "$url" 2>&1 | tail -1)
+            if [ -z "$raw_hash" ]; then
+              echo "ERROR: Failed to fetch hash for $url" >&2
+              exit 1
+            fi
+            nix hash convert --hash-algo sha256 --to sri "$raw_hash"
+          }
           
-          # Convert base32 to SRI format
-          HASH_AMD64=$(nix hash convert --hash-algo sha256 --to sri "$HASH_AMD64_RAW")
-          HASH_ARM64=$(nix hash convert --hash-algo sha256 --to sri "$HASH_ARM64_RAW")
-          HASH_DARWIN_AARCH64=$(nix hash convert --hash-algo sha256 --to sri "$HASH_DARWIN_AARCH64_RAW")
-          HASH_DARWIN_X64=$(nix hash convert --hash-algo sha256 --to sri "$HASH_DARWIN_X64_RAW")
+          HASH_AMD64=$(fetch_hash "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-amd64.deb")
+          HASH_ARM64=$(fetch_hash "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-arm64.deb")
+          HASH_DARWIN_AARCH64=$(fetch_hash "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-aarch64.app.tar.gz")
+          HASH_DARWIN_X64=$(fetch_hash "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-x64.app.tar.gz")
           
           echo "hash_amd64=$HASH_AMD64" >> $GITHUB_OUTPUT
           echo "hash_arm64=$HASH_ARM64" >> $GITHUB_OUTPUT
           echo "hash_darwin_aarch64=$HASH_DARWIN_AARCH64" >> $GITHUB_OUTPUT
           echo "hash_darwin_x64=$HASH_DARWIN_X64" >> $GITHUB_OUTPUT
+          
+          echo "Calculated hashes:"
+          echo "  x86_64-linux: $HASH_AMD64"
+          echo "  aarch64-linux: $HASH_ARM64"
+          echo "  aarch64-darwin: $HASH_DARWIN_AARCH64"
+          echo "  x86_64-darwin: $HASH_DARWIN_X64"
 
       - name: Update flake.nix
         run: |
@@ -92,7 +104,6 @@ jobs:
           # Update hashes using Python for proper multi-line handling
           python3 << 'EOF'
           import re
-          import sys
           
           with open('flake.nix', 'r') as f:
               content = f.read()
@@ -107,16 +118,32 @@ jobs:
           
           # Update each platform's hash
           for platform, hash_val in hashes.items():
-              pattern = rf'({platform} = \{{[^}}]+hash = )"sha256-[^"]+"(;[^}}]+\}};)'
-              replacement = rf'\1"{hash_val}"\2'
+              pattern = rf'({platform} = \{{[^}}]+hash = )"sha256-[^"]+"'
+              replacement = rf'\1"{hash_val}"'
               content = re.sub(pattern, replacement, content, flags=re.DOTALL)
           
           with open('flake.nix', 'w') as f:
               f.write(content)
+          
+          print("Updated hashes:")
+          for platform, hash_val in hashes.items():
+              print(f"  {platform}: {hash_val}")
           EOF
           
           # Show changes
           git diff flake.nix
+
+      - name: Verify flake builds
+        run: |
+          # Verify the flake evaluates correctly
+          echo "Checking flake evaluation..."
+          nix flake check --no-build
+          
+          # Try to build for x86_64-linux to verify hashes are correct
+          echo "Building package to verify hashes..."
+          nix build .#default --system x86_64-linux --no-link
+          
+          echo "Flake verification passed!"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
