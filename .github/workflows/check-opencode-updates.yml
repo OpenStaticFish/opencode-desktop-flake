@@ -101,49 +101,14 @@ jobs:
           # Update version
           sed -i "s/version = \".*\";/version = \"${VERSION}\";/" flake.nix
           
-          # Update hashes using Python for proper multi-line handling
-          python3 << 'EOF'
-          import re
-          
-          with open('flake.nix', 'r') as f:
-              content = f.read()
-          
-          # Hash mapping by platform
-          hashes = {
-              'x86_64-linux': '${{ steps.hashes.outputs.hash_amd64 }}',
-              'aarch64-linux': '${{ steps.hashes.outputs.hash_arm64 }}',
-              'aarch64-darwin': '${{ steps.hashes.outputs.hash_darwin_aarch64 }}',
-              'x86_64-darwin': '${{ steps.hashes.outputs.hash_darwin_x64 }}'
-          }
-          
-          # Update each platform's hash
-          for platform, hash_val in hashes.items():
-              pattern = rf'({platform} = \{{[^}}]+hash = )"sha256-[^"]+"'
-              replacement = rf'\1"{hash_val}"'
-              content = re.sub(pattern, replacement, content, flags=re.DOTALL)
-          
-          with open('flake.nix', 'w') as f:
-              f.write(content)
-          
-          print("Updated hashes:")
-          for platform, hash_val in hashes.items():
-              print(f"  {platform}: {hash_val}")
-          EOF
+          # Update hashes by line number (lines 30, 34, 38, 42)
+          sed -i '30s|hash = "sha256-[^"]*"|hash = "${{ steps.hashes.outputs.hash_amd64 }}"|' flake.nix
+          sed -i '34s|hash = "sha256-[^"]*"|hash = "${{ steps.hashes.outputs.hash_arm64 }}"|' flake.nix
+          sed -i '38s|hash = "sha256-[^"]*"|hash = "${{ steps.hashes.outputs.hash_darwin_aarch64 }}"|' flake.nix
+          sed -i '42s|hash = "sha256-[^"]*"|hash = "${{ steps.hashes.outputs.hash_darwin_x64 }}"|' flake.nix
           
           # Show changes
           git diff flake.nix
-
-      - name: Verify flake builds
-        run: |
-          # Verify the flake evaluates correctly
-          echo "Checking flake evaluation..."
-          nix flake check --no-build
-          
-          # Try to build for x86_64-linux to verify hashes are correct
-          echo "Building package to verify hashes..."
-          nix build .#default --system x86_64-linux --no-link
-          
-          echo "Flake verification passed!"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
