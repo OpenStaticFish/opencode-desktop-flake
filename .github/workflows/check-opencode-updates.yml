@@ -110,24 +110,17 @@ jobs:
           # Show changes
           git diff flake.nix
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: bump opencode-desktop to ${{ needs.check-update.outputs.latest_version }}"
-          title: "chore: bump opencode-desktop to ${{ needs.check-update.outputs.latest_version }}"
-          body: |
-            Automated update of OpenCode Desktop.
-            
-            **Changes:**
-            - Version: ${{ needs.check-update.outputs.current_version }} → ${{ needs.check-update.outputs.latest_version }}
-            - Updated hashes for all platforms:
-              - x86_64-linux
-              - aarch64-linux
-              - aarch64-darwin
-              - x86_64-darwin
-            
-            This PR was generated automatically by the update-check workflow.
-            Please review the changes before merging.
-          branch: update/opencode-desktop-${{ needs.check-update.outputs.latest_version }}
-          delete-branch: true
+      - name: Commit and push changes
+        run: |
+          VERSION="${{ needs.check-update.outputs.latest_version }}"
+          
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Commit changes
+          git add flake.nix
+          git commit -m "chore: bump opencode-desktop to ${VERSION}"
+          
+          # Push to main
+          git push
