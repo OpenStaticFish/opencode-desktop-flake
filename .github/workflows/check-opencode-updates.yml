@@ -2,125 +2,87 @@ name: Check for OpenCode Desktop updates
 
 on:
   schedule:
-    # Run daily at 6:00 AM UTC
     - cron: '0 6 * * *'
   workflow_dispatch:
-    # Allow manual triggering
 
 jobs:
-  check-update:
+  update:
     runs-on: ubuntu-latest
-    outputs:
-      update_needed: ${{ steps.check.outputs.update_needed }}
-      latest_version: ${{ steps.check.outputs.latest_version }}
-      current_version: ${{ steps.check.outputs.current_version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get current version
-        id: current
+      - name: Check for latest release and update flake
         run: |
           CURRENT_VERSION=$(grep 'version = "' flake.nix | head -1 | sed 's/.*version = "\(.*\)".*/\1/')
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           echo "Current version: $CURRENT_VERSION"
 
-      - name: Check for latest release
-        id: check
-        run: |
-          CURRENT_VERSION="${{ steps.current.outputs.current_version }}"
-          
-          # Get latest release from GitHub API
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest)
           LATEST_VERSION=$(echo "$LATEST_RELEASE" | grep '"tag_name":' | sed 's/.*"tag_name": "v\(.*\)".*/\1/')
-          
           echo "Latest version: $LATEST_VERSION"
-          echo "Current version: $CURRENT_VERSION"
-          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          
-          if [ "$LATEST_VERSION" != "$CURRENT_VERSION" ]; then
-            echo "Update needed: $CURRENT_VERSION -> $LATEST_VERSION"
-            echo "update_needed=true" >> $GITHUB_OUTPUT
-          else
-            echo "No update needed"
-            echo "update_needed=false" >> $GITHUB_OUTPUT
+
+          if [ "$LATEST_VERSION" = "$CURRENT_VERSION" ]; then
+            echo "No update needed ($CURRENT_VERSION is up to date)"
+            exit 0
           fi
 
-  update-flake:
-    needs: check-update
-    runs-on: ubuntu-latest
-    if: ${{ needs.check-update.outputs.update_needed == 'true' }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+          echo "Update needed: $CURRENT_VERSION -> $LATEST_VERSION"
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v12
-
-      - name: Calculate new hashes
-        id: hashes
-        run: |
-          VERSION="${{ needs.check-update.outputs.latest_version }}"
-          
-          # Calculate hashes for all platforms (convert base32 to SRI format)
-          echo "Calculating hashes for version $VERSION..."
-          
-          # Function to fetch and convert hash
-          fetch_hash() {
-            local url="$1"
-            local raw_hash
-            raw_hash=$(nix-prefetch-url "$url" 2>&1 | tail -1)
-            if [ -z "$raw_hash" ]; then
-              echo "ERROR: Failed to fetch hash for $url" >&2
-              exit 1
-            fi
-            nix hash convert --hash-algo sha256 --to sri "$raw_hash"
+          hex_to_sri() {
+            echo "$1" | xxd -r -p | base64 -w0 | awk '{print "sha256-" $0}'
           }
-          
-          HASH_AMD64=$(fetch_hash "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-amd64.deb")
-          HASH_ARM64=$(fetch_hash "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-linux-arm64.deb")
-          HASH_DARWIN_AARCH64=$(fetch_hash "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-aarch64.app.tar.gz")
-          HASH_DARWIN_X64=$(fetch_hash "https://github.com/anomalyco/opencode/releases/download/v${VERSION}/opencode-desktop-darwin-x64.app.tar.gz")
-          
-          echo "hash_amd64=$HASH_AMD64" >> $GITHUB_OUTPUT
-          echo "hash_arm64=$HASH_ARM64" >> $GITHUB_OUTPUT
-          echo "hash_darwin_aarch64=$HASH_DARWIN_AARCH64" >> $GITHUB_OUTPUT
-          echo "hash_darwin_x64=$HASH_DARWIN_X64" >> $GITHUB_OUTPUT
-          
-          echo "Calculated hashes:"
-          echo "  x86_64-linux: $HASH_AMD64"
-          echo "  aarch64-linux: $HASH_ARM64"
-          echo "  aarch64-darwin: $HASH_DARWIN_AARCH64"
-          echo "  x86_64-darwin: $HASH_DARWIN_X64"
 
-      - name: Update flake.nix
-        run: |
-          VERSION="${{ needs.check-update.outputs.latest_version }}"
-          
-          # Update version
-          sed -i "s/version = \".*\";/version = \"${VERSION}\";/" flake.nix
-          
-          # Update hashes by line number (lines 30, 34, 38, 42)
-          sed -i '30s|hash = "sha256-[^"]*"|hash = "${{ steps.hashes.outputs.hash_amd64 }}"|' flake.nix
-          sed -i '34s|hash = "sha256-[^"]*"|hash = "${{ steps.hashes.outputs.hash_arm64 }}"|' flake.nix
-          sed -i '38s|hash = "sha256-[^"]*"|hash = "${{ steps.hashes.outputs.hash_darwin_aarch64 }}"|' flake.nix
-          sed -i '42s|hash = "sha256-[^"]*"|hash = "${{ steps.hashes.outputs.hash_darwin_x64 }}"|' flake.nix
-          
-          # Show changes
+          extract_digest() {
+            local asset_name="$1"
+            local digest
+            digest=$(echo "$LATEST_RELEASE" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          for a in data['assets']:
+              if a['name'] == '$asset_name':
+                  print(a['digest'].replace('sha256:', ''))
+                  break
+          ")
+            hex_to_sri "$digest"
+          }
+
+          HASH_AMD64=$(extract_digest "opencode-desktop-linux-amd64.deb")
+          HASH_ARM64=$(extract_digest "opencode-desktop-linux-arm64.deb")
+          HASH_DARWIN_AARCH64=$(extract_digest "opencode-desktop-darwin-aarch64.app.tar.gz")
+          HASH_DARWIN_X64=$(extract_digest "opencode-desktop-darwin-x64.app.tar.gz")
+
+          echo "Computed hashes:"
+          echo "  x86_64-linux:   $HASH_AMD64"
+          echo "  aarch64-linux:  $HASH_ARM64"
+          echo "  aarch64-darwin: $HASH_DARWIN_AARCH64"
+          echo "  x86_64-darwin:  $HASH_DARWIN_X64"
+
+          if [ -z "$HASH_AMD64" ] || [ -z "$HASH_ARM64" ] || [ -z "$HASH_DARWIN_AARCH64" ] || [ -z "$HASH_DARWIN_X64" ]; then
+            echo "ERROR: Failed to extract one or more hashes"
+            exit 1
+          fi
+
+          sed -i "s/version = \".*\";/version = \"${LATEST_VERSION}\";/" flake.nix
+
+          sed -i '/opencode-desktop-linux-amd64.deb/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_AMD64}"'"|}' flake.nix
+          sed -i '/opencode-desktop-linux-arm64.deb/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_ARM64}"'"|}' flake.nix
+          sed -i '/opencode-desktop-darwin-aarch64.app.tar.gz/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_DARWIN_AARCH64}"'"|}' flake.nix
+          sed -i '/opencode-desktop-darwin-x64.app.tar.gz/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_DARWIN_X64}"'"|}' flake.nix
+
+          echo "Changes:"
           git diff flake.nix
 
       - name: Commit and push changes
         run: |
-          VERSION="${{ needs.check-update.outputs.latest_version }}"
-          
-          # Configure git
+          if git diff --quiet flake.nix; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          LATEST_VERSION=$(grep 'version = "' flake.nix | head -1 | sed 's/.*version = "\(.*\)".*/\1/')
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Commit changes
           git add flake.nix
-          git commit -m "chore: bump opencode-desktop to ${VERSION}"
-          
-          # Push to main
+          git commit -m "chore: bump opencode-desktop to ${LATEST_VERSION}"
           git push
