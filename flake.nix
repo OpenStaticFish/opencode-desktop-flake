@@ -66,8 +66,10 @@
             
             installPhase = lib.optionalString stdenv.isLinux ''
               mkdir -p $out
+              cp -r opt $out/
               cp -r usr/* $out/
-              mv $out/bin/OpenCode $out/bin/opencode-desktop-unwrapped
+              mkdir -p $out/bin
+              ln -s $out/opt/OpenCode/@opencode-aidesktop $out/bin/opencode-desktop-unwrapped
             '';
           };
           
@@ -133,22 +135,22 @@
             extraInstallCommands = ''
               mkdir -p $out/share/applications
               mkdir -p $out/share/icons/hicolor/128x128/apps
-              mkdir -p $out/share/icons/hicolor/256x256@2/apps
               mkdir -p $out/share/icons/hicolor/32x32/apps
-              
+
               # Copy desktop entry
-              cp ${opencode-desktop-unwrapped}/share/applications/OpenCode.desktop $out/share/applications/opencode-desktop.desktop
-              sed -i 's|Exec=OpenCode|Exec=opencode-desktop|' $out/share/applications/opencode-desktop.desktop
-              sed -i 's|Icon=OpenCode|Icon=opencode-desktop|' $out/share/applications/opencode-desktop.desktop
-              
+              cp ${opencode-desktop-unwrapped}/share/applications/@opencode-aidesktop.desktop $out/share/applications/opencode-desktop.desktop
+              sed -i 's|Exec="/opt/OpenCode/@opencode-aidesktop" %U|Exec=opencode-desktop %U|' $out/share/applications/opencode-desktop.desktop
+              sed -i 's|Icon=@opencode-aidesktop|Icon=opencode-desktop|' $out/share/applications/opencode-desktop.desktop
+
               # Copy icons
-              cp ${opencode-desktop-unwrapped}/share/icons/hicolor/128x128/apps/OpenCode.png $out/share/icons/hicolor/128x128/apps/opencode-desktop.png
-              cp ${opencode-desktop-unwrapped}/share/icons/hicolor/256x256@2/apps/OpenCode.png $out/share/icons/hicolor/256x256@2/apps/opencode-desktop.png
-              cp ${opencode-desktop-unwrapped}/share/icons/hicolor/32x32/apps/OpenCode.png $out/share/icons/hicolor/32x32/apps/opencode-desktop.png
-              
+              cp ${opencode-desktop-unwrapped}/share/icons/hicolor/128x128/apps/@opencode-aidesktop.png $out/share/icons/hicolor/128x128/apps/opencode-desktop.png
+              cp ${opencode-desktop-unwrapped}/share/icons/hicolor/32x32/apps/@opencode-aidesktop.png $out/share/icons/hicolor/32x32/apps/opencode-desktop.png
+
               # Copy metainfo
-              mkdir -p $out/share/metainfo
-              cp ${opencode-desktop-unwrapped}/share/metainfo/ai.opencode.opencode.metainfo.xml $out/share/metainfo/
+              if [ -d ${opencode-desktop-unwrapped}/share/metainfo ]; then
+                mkdir -p $out/share/metainfo
+                cp ${opencode-desktop-unwrapped}/share/metainfo/* $out/share/metainfo/
+              fi
             '';
             
             runScript = "${opencode-desktop-unwrapped}/bin/opencode-desktop-unwrapped";
