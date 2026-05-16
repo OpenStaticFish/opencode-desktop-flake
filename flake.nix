@@ -101,6 +101,8 @@
               xorg.libxcb
               libxkbcommon
               libdrm
+              libgbm
+              libglvnd
               mesa
               
               # Networking/Security
@@ -125,6 +127,7 @@
               nspr
               expat
               libuuid
+              udev
               cups
               
               # Fontconfig
