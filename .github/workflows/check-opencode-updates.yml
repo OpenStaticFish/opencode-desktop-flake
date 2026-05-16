@@ -48,8 +48,8 @@ jobs:
 
           HASH_AMD64=$(extract_digest "opencode-desktop-linux-amd64.deb")
           HASH_ARM64=$(extract_digest "opencode-desktop-linux-arm64.deb")
-          HASH_DARWIN_AARCH64=$(extract_digest "opencode-desktop-darwin-aarch64.app.tar.gz")
-          HASH_DARWIN_X64=$(extract_digest "opencode-desktop-darwin-x64.app.tar.gz")
+          HASH_DARWIN_AARCH64=$(extract_digest "opencode-desktop-mac-arm64.app.tar.gz")
+          HASH_DARWIN_X64=$(extract_digest "opencode-desktop-mac-x64.app.tar.gz")
 
           echo "Computed hashes:"
           echo "  x86_64-linux:   $HASH_AMD64"
@@ -66,8 +66,8 @@ jobs:
 
           sed -i '/opencode-desktop-linux-amd64.deb/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_AMD64}"'"|}' flake.nix
           sed -i '/opencode-desktop-linux-arm64.deb/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_ARM64}"'"|}' flake.nix
-          sed -i '/opencode-desktop-darwin-aarch64.app.tar.gz/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_DARWIN_AARCH64}"'"|}' flake.nix
-          sed -i '/opencode-desktop-darwin-x64.app.tar.gz/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_DARWIN_X64}"'"|}' flake.nix
+          sed -i '/opencode-desktop-mac-arm64.app.tar.gz/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_DARWIN_AARCH64}"'"|}' flake.nix
+          sed -i '/opencode-desktop-mac-x64.app.tar.gz/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_DARWIN_X64}"'"|}' flake.nix
 
           echo "Changes:"
           git diff flake.nix
