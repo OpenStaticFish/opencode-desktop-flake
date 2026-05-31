@@ -96,8 +96,8 @@ This repository uses GitHub Actions workflows to automatically handle updates:
 
 - **Schedule** - Runs daily at 6:00 AM UTC to check for new OpenCode Desktop releases
 - **Manual trigger** - Can be triggered manually from the Actions tab
-- **Auto-update** - Automatically updates version and calculates new hashes for all platforms
-- **Pull requests** - Creates PRs for you to review before merging
+- **Validation** - Builds the updated x86_64 Linux package outputs before publishing changes
+- **Pull requests** - Creates or updates a PR for review only after validation passes
 
 ### Nixpkgs Updates (flake.lock)
 
