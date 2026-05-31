@@ -137,17 +137,19 @@
             
             extraInstallCommands = ''
               mkdir -p $out/share/applications
-              mkdir -p $out/share/icons/hicolor/128x128/apps
-              mkdir -p $out/share/icons/hicolor/32x32/apps
+              mkdir -p $out/share/icons/hicolor
 
               # Copy desktop entry
               cp ${opencode-desktop-unwrapped}/share/applications/@opencode-aidesktop.desktop $out/share/applications/opencode-desktop.desktop
               sed -i 's|Exec="/opt/OpenCode/@opencode-aidesktop" %U|Exec=opencode-desktop %U|' $out/share/applications/opencode-desktop.desktop
               sed -i 's|Icon=@opencode-aidesktop|Icon=opencode-desktop|' $out/share/applications/opencode-desktop.desktop
 
-              # Copy icons
-              cp ${opencode-desktop-unwrapped}/share/icons/hicolor/128x128/apps/@opencode-aidesktop.png $out/share/icons/hicolor/128x128/apps/opencode-desktop.png
-              cp ${opencode-desktop-unwrapped}/share/icons/hicolor/32x32/apps/@opencode-aidesktop.png $out/share/icons/hicolor/32x32/apps/opencode-desktop.png
+              # Copy all shipped icon sizes; upstream does not consistently include 32x32.
+              for icon in ${opencode-desktop-unwrapped}/share/icons/hicolor/*/apps/@opencode-aidesktop.png; do
+                size=$(basename "$(dirname "$(dirname "$icon")")")
+                mkdir -p "$out/share/icons/hicolor/$size/apps"
+                cp "$icon" "$out/share/icons/hicolor/$size/apps/opencode-desktop.png"
+              done
 
               # Copy metainfo
               if [ -d ${opencode-desktop-unwrapped}/share/metainfo ]; then
