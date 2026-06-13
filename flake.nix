@@ -16,7 +16,7 @@
       
       forEachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
       
-      version = "1.16.0";
+      version = "1.17.4";
       
     in {
       packages = forEachSystem (pkgs: 
@@ -27,19 +27,19 @@
           platformInfo = {
             x86_64-linux = {
               asset = "opencode-desktop-linux-amd64.deb";
-              hash = "sha256-y4JaMNKA9nSM1k21eDsq1/007wG73my1PmwmMPvZiWM=";
+              hash = "sha256-tfOUHvbQS2xtQ6+tApJWA8GIUp2w7URdcNVlLeuYw8E=";
             };
             aarch64-linux = {
               asset = "opencode-desktop-linux-arm64.deb";
-              hash = "sha256-rptjSn3mAnTFbj7+By0NhPO+2aedvve5pqUPgnL+9No=";
+              hash = "sha256-XIkQgd1iLOD+lhxdT8NXQ9erV/frxIRndwhYjLD+Pns=";
             };
             aarch64-darwin = {
               asset = "opencode-desktop-mac-arm64.app.tar.gz";
-              hash = "sha256-R6zraZTfs68eG8y6sAO10HeJVCKZWhZSfFcRe9UafZ4=";
+              hash = "sha256-He2TWRtKZ+aXVcg/iKvcU2VuTc79mjjVTtiB0MPxxC0=";
             };
             x86_64-darwin = {
               asset = "opencode-desktop-mac-x64.app.tar.gz";
-              hash = "sha256-NlgsmmPuQ8/auwjyRjcy8d3Yiwi3Po3n/Otv8aj5kuA=";
+              hash = "sha256-yv7kcGB35vCyuN+vnRirExxUiGiAJxzn0JjIc1Q9UM0=";
             };
           };
           
@@ -69,7 +69,7 @@
               cp -r opt $out/
               cp -r usr/* $out/
               mkdir -p $out/bin
-              ln -s $out/opt/OpenCode/@opencode-aidesktop $out/bin/opencode-desktop-unwrapped
+              ln -s $out/opt/OpenCode/ai.opencode.desktop $out/bin/opencode-desktop-unwrapped
             '';
           };
           
@@ -140,12 +140,12 @@
               mkdir -p $out/share/icons/hicolor
 
               # Copy desktop entry
-              cp ${opencode-desktop-unwrapped}/share/applications/@opencode-aidesktop.desktop $out/share/applications/opencode-desktop.desktop
-              sed -i 's|Exec="/opt/OpenCode/@opencode-aidesktop" %U|Exec=opencode-desktop %U|' $out/share/applications/opencode-desktop.desktop
-              sed -i 's|Icon=@opencode-aidesktop|Icon=opencode-desktop|' $out/share/applications/opencode-desktop.desktop
+              cp ${opencode-desktop-unwrapped}/share/applications/ai.opencode.desktop.desktop $out/share/applications/opencode-desktop.desktop
+              sed -i 's|Exec=/opt/OpenCode/ai.opencode.desktop %U|Exec=opencode-desktop %U|' $out/share/applications/opencode-desktop.desktop
+              sed -i 's|Icon=ai.opencode.desktop|Icon=opencode-desktop|' $out/share/applications/opencode-desktop.desktop
 
               # Copy all shipped icon sizes; upstream does not consistently include 32x32.
-              for icon in ${opencode-desktop-unwrapped}/share/icons/hicolor/*/apps/@opencode-aidesktop.png; do
+              for icon in ${opencode-desktop-unwrapped}/share/icons/hicolor/*/apps/ai.opencode.desktop.png; do
                 size=$(basename "$(dirname "$(dirname "$icon")")")
                 mkdir -p "$out/share/icons/hicolor/$size/apps"
                 cp "$icon" "$out/share/icons/hicolor/$size/apps/opencode-desktop.png"
