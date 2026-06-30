@@ -94,6 +94,7 @@ jobs:
           nix build --no-link .#packages.x86_64-linux.unwrapped
 
       - name: Create update pull request
+        id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -107,3 +108,17 @@ jobs:
             - `nix build --no-link .#packages.x86_64-linux.unwrapped`
           branch: update/opencode-desktop
           delete-branch: true
+
+      - name: Auto-merge pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr_number="${{ steps.cpr.outputs.pull-request-number }}"
+          if [ -z "$pr_number" ]; then
+            echo "No pull request was created; nothing to merge"
+            exit 0
+          fi
+          echo "Squash-merging PR #$pr_number (already validated by nix build above)"
+          if ! gh pr merge "$pr_number" --squash --delete-branch; then
+            echo "::warning::Could not auto-merge PR #$pr_number (branch protection or repo settings may block it). Merge it manually."
+          fi
