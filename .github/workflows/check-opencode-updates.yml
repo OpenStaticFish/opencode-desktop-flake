@@ -23,64 +23,14 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v12
 
-      - name: Check for latest release and update flake
+      - name: Test update logic
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Check for latest stable OpenCode v2 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          CURRENT_VERSION=$(grep 'version = "' flake.nix | head -1 | sed 's/.*version = "\(.*\)".*/\1/')
-          echo "Current version: $CURRENT_VERSION"
-
-          LATEST_RELEASE=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest)
-          LATEST_VERSION=$(echo "$LATEST_RELEASE" | grep '"tag_name":' | sed 's/.*"tag_name": "v\(.*\)".*/\1/')
-          echo "Latest version: $LATEST_VERSION"
-
-          if [ "$LATEST_VERSION" = "$CURRENT_VERSION" ]; then
-            echo "No update needed ($CURRENT_VERSION is up to date)"
-            exit 0
-          fi
-
-          echo "Update needed: $CURRENT_VERSION -> $LATEST_VERSION"
-
-          hex_to_sri() {
-            echo "$1" | xxd -r -p | base64 -w0 | awk '{print "sha256-" $0}'
-          }
-
-          extract_digest() {
-            local asset_name="$1"
-            local digest
-            digest=$(echo "$LATEST_RELEASE" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          for a in data['assets']:
-              if a['name'] == '$asset_name':
-                  print(a['digest'].replace('sha256:', ''))
-                  break
-          ")
-            hex_to_sri "$digest"
-          }
-
-          HASH_AMD64=$(extract_digest "opencode-desktop-linux-amd64.deb")
-          HASH_ARM64=$(extract_digest "opencode-desktop-linux-arm64.deb")
-          HASH_DARWIN_AARCH64=$(extract_digest "opencode-desktop-mac-arm64.app.tar.gz")
-          HASH_DARWIN_X64=$(extract_digest "opencode-desktop-mac-x64.app.tar.gz")
-
-          echo "Computed hashes:"
-          echo "  x86_64-linux:   $HASH_AMD64"
-          echo "  aarch64-linux:  $HASH_ARM64"
-          echo "  aarch64-darwin: $HASH_DARWIN_AARCH64"
-          echo "  x86_64-darwin:  $HASH_DARWIN_X64"
-
-          if [ -z "$HASH_AMD64" ] || [ -z "$HASH_ARM64" ] || [ -z "$HASH_DARWIN_AARCH64" ] || [ -z "$HASH_DARWIN_X64" ]; then
-            echo "ERROR: Failed to extract one or more hashes"
-            exit 1
-          fi
-
-          sed -i "s/version = \".*\";/version = \"${LATEST_VERSION}\";/" flake.nix
-
-          sed -i '/opencode-desktop-linux-amd64.deb/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_AMD64}"'"|}' flake.nix
-          sed -i '/opencode-desktop-linux-arm64.deb/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_ARM64}"'"|}' flake.nix
-          sed -i '/opencode-desktop-mac-arm64.app.tar.gz/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_DARWIN_AARCH64}"'"|}' flake.nix
-          sed -i '/opencode-desktop-mac-x64.app.tar.gz/{n;s|hash = "sha256-[^"]*"|hash = "'"${HASH_DARWIN_X64}"'"|}' flake.nix
-
-          echo "Changes:"
+          python3 scripts/update_opencode.py
           git diff flake.nix
 
       - name: Validate updated package
@@ -90,8 +40,11 @@ jobs:
             exit 0
           fi
 
-          nix build --no-link .#packages.x86_64-linux.default
-          nix build --no-link .#packages.x86_64-linux.unwrapped
+          nix flake check --no-build --all-systems
+          wrapped=$(nix build --no-link --print-out-paths .#packages.x86_64-linux.default)
+          unwrapped=$(nix build --no-link --print-out-paths .#packages.x86_64-linux.unwrapped)
+          version=$(nix eval --raw .#packages.x86_64-linux.unwrapped.version)
+          bash scripts/check_package.sh "$wrapped" "$unwrapped" x86_64-linux "$version"
 
       - name: Create update pull request
         id: cpr
@@ -101,11 +54,12 @@ jobs:
           commit-message: "chore: bump opencode-desktop"
           title: "chore: bump opencode-desktop"
           body: |
-            Automated OpenCode Desktop update.
+            Automated OpenCode Desktop v2 update.
 
             Validation run before this PR was created:
-            - `nix build --no-link .#packages.x86_64-linux.default`
-            - `nix build --no-link .#packages.x86_64-linux.unwrapped`
+            - `python3 -m unittest discover -s tests -v`
+            - `nix flake check --no-build --all-systems`
+            - Built and checked both x86_64 Linux package outputs
           branch: update/opencode-desktop
           delete-branch: true
 

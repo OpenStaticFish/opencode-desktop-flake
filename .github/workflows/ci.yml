@@ -1,0 +1,46 @@
+name: Validate packages
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-latest
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - system: aarch64-darwin
+            runner: macos-15
+          - system: x86_64-darwin
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v12
+
+      - name: Test updater and evaluate all platforms
+        if: matrix.system == 'x86_64-linux'
+        run: |
+          python3 -m unittest discover -s tests -v
+          nix flake check --no-build --all-systems
+
+      - name: Build and check package
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          wrapped=$(nix build --no-link --print-out-paths ".#packages.${SYSTEM}.default")
+          unwrapped=$(nix build --no-link --print-out-paths ".#packages.${SYSTEM}.unwrapped")
+          version=$(nix eval --raw ".#packages.${SYSTEM}.unwrapped.version")
+          bash scripts/check_package.sh "$wrapped" "$unwrapped" "$SYSTEM" "$version"

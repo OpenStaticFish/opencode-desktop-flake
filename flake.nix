@@ -3,9 +3,11 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # Unstable no longer supports Intel macOS; 26.05 is its last supported release.
+    nixpkgs-darwin.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
   };
 
-  outputs = { self, nixpkgs, ... }:
+  outputs = { self, nixpkgs, nixpkgs-darwin, ... }:
     let
       systems = [
         "aarch64-linux"
@@ -14,9 +16,11 @@
         "x86_64-darwin"
       ];
       
-      forEachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      forEachSystem = f: nixpkgs.lib.genAttrs systems (system:
+        f (if system == "x86_64-darwin" then nixpkgs-darwin.legacyPackages.${system} else nixpkgs.legacyPackages.${system})
+      );
       
-      version = "1.19.5";
+      version = "2.2.6";
       
     in {
       packages = forEachSystem (pkgs: 
@@ -27,19 +31,19 @@
           platformInfo = {
             x86_64-linux = {
               asset = "opencode-desktop-linux-amd64.deb";
-              hash = "sha256-3jgqrLX0Kjuh+o1CprYwMZrq04ubp8knAL7l2jl3uzI=";
+              hash = "sha256-h/ZlVfOj/sOQHvfhrIb14t61W5AATPQjludUfGsZVFk=";
             };
             aarch64-linux = {
               asset = "opencode-desktop-linux-arm64.deb";
-              hash = "sha256-aq78Psr46x+nigtIRXtG5RTpHzzUyxIfdcZWOm5CJKc=";
+              hash = "sha256-9/YSlP8xHp8O4KKDqwBl80AI+1ciMASANFzaNHZadXE=";
             };
             aarch64-darwin = {
               asset = "opencode-desktop-mac-arm64.app.tar.gz";
-              hash = "sha256-gCEn4JpR0jnTW3OwIBD5pzbuoU0EkS8spEUz3foAW2c=";
+              hash = "sha256-jpfhMYFKht8yTlzfARMPnuvNqPp+8Sf0AOAFtqJLXyY=";
             };
             x86_64-darwin = {
               asset = "opencode-desktop-mac-x64.app.tar.gz";
-              hash = "sha256-mR0YnlDAWP+qeQwkah0skIphRvMkFfF9K/7aQiT64pI=";
+              hash = "sha256-mZK5tfFUFkk1C+ErFdhp/m+fnEPYEPABeuy99JQ4vlk=";
             };
           };
           
@@ -55,22 +59,43 @@
               hash = info.hash;
             };
             
-            nativeBuildInputs = [ dpkg ];
-            
+            nativeBuildInputs = lib.optionals stdenv.hostPlatform.isLinux [ dpkg ];
+
             dontBuild = true;
+            dontConfigure = true;
             dontFixup = true;
-            
-            unpackPhase = lib.optionalString stdenv.isLinux ''
-              dpkg-deb -x $src .
+
+            unpackPhase = if stdenv.hostPlatform.isLinux then ''
+              runHook preUnpack
+              dpkg-deb -x "$src" .
+              runHook postUnpack
+            '' else ''
+              runHook preUnpack
+              tar -xzf "$src"
+              runHook postUnpack
             '';
-            
-            installPhase = lib.optionalString stdenv.isLinux ''
-              mkdir -p $out
-              cp -r opt $out/
-              cp -r usr/* $out/
-              mkdir -p $out/bin
-              ln -s $out/opt/OpenCode/ai.opencode.desktop $out/bin/opencode-desktop-unwrapped
+
+            installPhase = if stdenv.hostPlatform.isLinux then ''
+              runHook preInstall
+              mkdir -p "$out/bin"
+              cp -r opt "$out/"
+              cp -r usr/* "$out/"
+              ln -s "$out/opt/OpenCode/ai.opencode" "$out/bin/opencode-desktop-unwrapped"
+              runHook postInstall
+            '' else ''
+              runHook preInstall
+              mkdir -p "$out/Applications" "$out/bin"
+              cp -R OpenCode.app "$out/Applications/"
+              cat > "$out/bin/opencode-desktop" <<EOF
+              #!${stdenv.shell}
+              exec "$out/Applications/OpenCode.app/Contents/MacOS/OpenCode" "\$@"
+              EOF
+              chmod +x "$out/bin/opencode-desktop"
+              ln -s opencode-desktop "$out/bin/opencode-desktop-unwrapped"
+              runHook postInstall
             '';
+
+            meta.mainProgram = if stdenv.hostPlatform.isLinux then "opencode-desktop-unwrapped" else "opencode-desktop";
           };
           
           # FHS environment for running the binary
@@ -92,13 +117,16 @@
               librsvg
               
               # X11/XWayland
-              xorg.libX11
-              xorg.libXcomposite
-              xorg.libXdamage
-              xorg.libXext
-              xorg.libXfixes
-              xorg.libXrandr
-              xorg.libxcb
+              libx11
+              libxcomposite
+              libxdamage
+              libxext
+              libxfixes
+              libxrandr
+              libxcb
+              libxrender
+              libxscrnsaver
+              libxtst
               libxkbcommon
               libdrm
               libgbm
@@ -110,6 +138,8 @@
               libsoup_3
               dbus
               libappindicator
+              libnotify
+              libsecret
               
               # GStreamer
               gst_all_1.gstreamer
@@ -139,17 +169,10 @@
               mkdir -p $out/share/applications
               mkdir -p $out/share/icons/hicolor
 
-              # Copy desktop entry
-              cp ${opencode-desktop-unwrapped}/share/applications/ai.opencode.desktop.desktop $out/share/applications/opencode-desktop.desktop
-              sed -i 's|Exec=/opt/OpenCode/ai.opencode.desktop %U|Exec=opencode-desktop %U|' $out/share/applications/opencode-desktop.desktop
-              sed -i 's|Icon=ai.opencode.desktop|Icon=opencode-desktop|' $out/share/applications/opencode-desktop.desktop
-
-              # Copy all shipped icon sizes; upstream does not consistently include 32x32.
-              for icon in ${opencode-desktop-unwrapped}/share/icons/hicolor/*/apps/ai.opencode.desktop.png; do
-                size=$(basename "$(dirname "$(dirname "$icon")")")
-                mkdir -p "$out/share/icons/hicolor/$size/apps"
-                cp "$icon" "$out/share/icons/hicolor/$size/apps/opencode-desktop.png"
-              done
+              # Keep the desktop ID and icon name consistent with upstream metainfo.
+              cp ${opencode-desktop-unwrapped}/share/applications/ai.opencode.desktop.desktop "$out/share/applications/"
+              sed -i "s|^Exec=.*|Exec=$out/bin/opencode-desktop %U|" "$out/share/applications/ai.opencode.desktop.desktop"
+              cp -r ${opencode-desktop-unwrapped}/share/icons/hicolor/. "$out/share/icons/hicolor/"
 
               # Copy metainfo
               if [ -d ${opencode-desktop-unwrapped}/share/metainfo ]; then
@@ -162,7 +185,7 @@
           };
           
         in {
-          default = opencode-desktop-fhs;
+          default = if stdenv.hostPlatform.isLinux then opencode-desktop-fhs else opencode-desktop-unwrapped;
           unwrapped = opencode-desktop-unwrapped;
         }
       );
